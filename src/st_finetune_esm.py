@@ -176,3 +176,26 @@ def finetune_esm(
         mode='w', index=False, columns=sorted(results.columns.values))
     
     return results
+
+
+def get_outputs(model_location, df, wt_fasta_file, toks_per_batch=512):
+    
+    model, alphabet = pretrained.load_model_and_alphabet(model_location)
+    batch_converter = BatchConverter(alphabet)
+    mask_idx = torch.tensor(alphabet.mask_idx)
+    model_eval = model.eval()
+
+    wt_seq = read_fasta(wt_fasta_file)[0]
+    _, _, wt_toks = batch_converter([('WT', wt_seq)])
+    
+    dataset = CSVBatchedDataset.from_dataframe(df)
+    batches = dataset.get_batch_indices(toks_per_batch, extra_toks_per_seq=1)
+    data_loader = torch.utils.data.DataLoader(dataset, collate_fn=batch_converter, batch_sampler=batches)
+    
+    y_pred = []
+    with torch.no_grad():
+        for batch_idx, (labels, strs, toks) in enumerate(data_loader):
+            predictions = predict(model, toks, wt_toks, mask_idx)
+            y_pred.append(predictions.to('cpu').numpy())
+            
+    return np.concatenate(y_pred)
