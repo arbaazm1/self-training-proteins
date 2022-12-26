@@ -95,6 +95,7 @@ def finetune_esm(
     for epoch in range(epochs+1):
         # Train
         if epoch > 0:
+            model_train = model.train()
             for batch_idx, (labels, strs, toks) in enumerate(train_data_loader):
                 if batch_idx % 100 == 0 and log:
                     print(
@@ -132,7 +133,6 @@ def finetune_esm(
         if best_val_spearman is None or val_spearman[epoch] > best_val_spearman:
             best_val_spearman = val_spearman[epoch]
             model_data["model"] = model.state_dict() 
-            #model_data["toplinear"] = toplinear.state_dict()
             torch.save(model_data, os.path.join(output_dir, 'model_data.pt'))
 
     np.savetxt(os.path.join(output_dir, 'loss_trajectory_train.npy'), train_loss)
@@ -175,7 +175,7 @@ def finetune_esm(
     results.to_csv(os.path.join(output_dir, 'metrics.csv'),
         mode='w', index=False, columns=sorted(results.columns.values))
     
-    return results
+    return model
 
 
 def get_outputs(model_location, df, wt_fasta_file, toks_per_batch=512):
