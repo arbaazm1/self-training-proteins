@@ -2,6 +2,7 @@ from Bio import SeqIO
 import os
 import pandas as pd
 import pathlib
+from sklearn.metrics import mean_squared_error as mse
 from sklearn.utils import shuffle 
 from st_finetune_esm import finetune_esm, get_outputs
 import torch
@@ -10,7 +11,7 @@ from utils.metric_utils import spearman, ndcg
 
 def train_val_test_split(dataset_name, n_train, val_split, test_split, seed):
     data_path = os.path.join("..", "processed_data", dataset_name, "data.csv")
-    df_full = shuffle(pd.read_csv(data_path, random_state=seed))
+    df_full = shuffle(pd.read_csv(data_path), random_state=seed)
 
     n_test = int(len(df_full) * test_split)
     df_test = df_full[-n_test:]
@@ -28,7 +29,8 @@ def train_val_test_split(dataset_name, n_train, val_split, test_split, seed):
     return df_train, df_val, df_test
 
 def create_msa_df(dataset_name, train_df, val_df):
-    msa_a2m_path = os.path.join("..", "alignments", f"{dataset_name}.a2m")
+    dataset_prefix = '_'.join(dataset_name.split('_')[:2])
+    msa_a2m_path = os.path.join("..", "alignments", f"{dataset_prefix}.a2m")
     
     names, seqs = [], []
 
@@ -78,7 +80,7 @@ def run_experiment(
     metric_fns = {
         'spearman': spearman,
         'ndcg': ndcg,
-        "mse": torch.nn.MSELoss(reduction='mean')
+        "mse": mse
     }
 
     #Create train, val, test dataframes (use data infra section of Chloe's script)
@@ -140,7 +142,7 @@ def run_experiment(
         pseudolabels = get_outputs(teacher_model_path, msa_df, wt_fasta_path)
         msa_df['log_fitness'] = pseudolabels
         #Concat pseudolabels with actual labels
-        combined_labelled_df = pd.concat(msa_df[["seqs", "log_fitness"]], train_df[["seqs", "log_fitness"]])
+        combined_labelled_df = pd.concat([msa_df[["seq", "log_fitness"]], train_df[["seq", "log_fitness"]]])
         #Place concatenated result in scratch folder
         # combined_labelled_df.to_csv(os.path.join(output_dir, 'combined_data.csv'))
         student_model = finetune_esm(
