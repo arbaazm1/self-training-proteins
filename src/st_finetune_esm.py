@@ -187,6 +187,11 @@ def get_outputs(model_location, df, wt_fasta_file, toks_per_batch=512):
 
     wt_seq = read_fasta(wt_fasta_file)[0]
     _, _, wt_toks = batch_converter([('WT', wt_seq)])
+
+    if torch.cuda.is_available():
+        model = model.cuda()
+        mask_idx = mask_idx.cuda()
+        wt_toks = wt_toks.cuda()
     
     dataset = CSVBatchedDataset.from_dataframe(df)
     batches = dataset.get_batch_indices(toks_per_batch, extra_toks_per_seq=1)
