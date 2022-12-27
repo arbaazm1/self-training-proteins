@@ -69,7 +69,9 @@ def run_experiment(
     test_split=0.2,
     # wandb_log=False,
     finetune_log=False,
-    output_dir = "/content/experiment_artifacts/"
+    output_dir = "/content/experiment_artifacts/",
+    train_toks_per_batch=256,
+    eval_toks_per_batch=2048,
 ):
 
     best_model_data = torch.load(model_path, map_location='cpu')
@@ -108,14 +110,15 @@ def run_experiment(
         finetune_epochs,
         finetune_learning_rate,
         log=finetune_log,
-        output_dir=baseline_folder
+        output_dir=baseline_folder,
+        toks_per_batch=train_toks_per_batch
         )
     baseline_model_path = os.path.join(baseline_folder, "model_data.pt")
 
     baseline_dict = {}
     for i in ["train", "val", "test"]:
         for k, mf in metric_fns.items():
-            preds = get_outputs(baseline_model_path, eval(f"{i}_df"), wt_fasta_path)
+            preds = get_outputs(baseline_model_path, eval(f"{i}_df"), wt_fasta_path, toks_per_batch=eval_toks_per_batch)
             baseline_dict[f"{i}_{k}"] = mf(preds, eval(f"{i}_df").log_fitness.values)
 
     baseline_results = pd.DataFrame(columns=sorted(baseline_dict.keys()))
@@ -132,16 +135,13 @@ def run_experiment(
     val_ndcg = []
     best_val_spearman = None
 
-
-    ###SELF TRAINING INITIALIZATION###
-    #Probably just use baseline here as in teacher_model = baseline
     teacher_model_path = baseline_model_path
 
     ###SELF TRAINING LOOP#
     for _ in tqdm(range(num_self_train_iters)):
         #Get teacher_model pseudolabels for MSA sequences
         msa_df = pd.read_csv(os.path.join(output_dir, 'msa_data.csv'))
-        pseudolabels = get_outputs(teacher_model_path, msa_df, wt_fasta_path)
+        pseudolabels = get_outputs(teacher_model_path, msa_df, wt_fasta_path, toks_per_batch=eval_toks_per_batch)
         msa_df['log_fitness'] = pseudolabels
         #Concat pseudolabels with actual labels
         combined_labelled_df = pd.concat([msa_df[["seq", "log_fitness"]], train_df[["seq", "log_fitness"]]])
@@ -155,13 +155,14 @@ def run_experiment(
                     finetune_epochs,
                     finetune_learning_rate,
                     log=finetune_log,
-                    output_dir=output_dir
+                    output_dir=output_dir,
+                    toks_per_batch=train_toks_per_batch
         )
         #Log train, val Spearmen + MSE for student
         student_model_path = os.path.join(output_dir, 'model_data.pt')
         for i in ["train", "val"]:
             for k, mf in metric_fns.items():
-                preds = get_outputs(student_model_path, eval(f"{i}_df"), wt_fasta_path)
+                preds = get_outputs(student_model_path, eval(f"{i}_df"), wt_fasta_path, toks_per_batch=eval_toks_per_batch)
                 arr = eval(f"{i}_{k}")
                 arr.append(mf(preds, eval(f"{i}_df").log_fitness.values))
 
@@ -178,7 +179,8 @@ def run_experiment(
     best_st_model_preds = get_outputs(
                                         os.path.join(output_dir, 'early_stopped_st_model_data.pt'),
                                         test_df,
-                                        wt_fasta_path)
+                                        wt_fasta_path,
+                                        toks_per_batch=eval_toks_per_batch)
     
     res_dict = {}
     for i in ["train", "val"]:
