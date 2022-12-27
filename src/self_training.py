@@ -72,6 +72,8 @@ def run_experiment(
     output_dir = "/content/experiment_artifacts/"
 ):
 
+    best_model_data = torch.load(model_path, map_location='cpu')
+
     # Create experiment_artifacts directory for storing (labeled +) pseudolabeled sequences, 
     # global best model, and per_iteration model for logging metrics 
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -166,7 +168,8 @@ def run_experiment(
         #Early stopping variables update
         if best_val_spearman is None or val_spearman[-1] > best_val_spearman:
             best_val_spearman = val_spearman[-1]
-            torch.save(student_model, os.path.join(output_dir, 'early_stopped_st_model_data.pt'))
+            best_model_data["model"] = student_model.state_dict()
+            torch.save(best_model_data, os.path.join(output_dir, 'early_stopped_st_model_data.pt'))
         
         teacher_model_path = student_model_path
     ###FIN SELF TRAINING LOOP###
