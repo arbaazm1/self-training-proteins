@@ -1,4 +1,5 @@
 from Bio import SeqIO
+import json
 import os
 import pandas as pd
 import pathlib
@@ -74,7 +75,7 @@ def run_experiment(
     eval_toks_per_batch=2048,
 ):
 
-    best_model_data = torch.load(model_path, map_location='cpu')
+    best_model = None
 
     # Create experiment_artifacts directory for storing (labeled +) pseudolabeled sequences, 
     # global best model, and per_iteration model for logging metrics 
@@ -118,13 +119,14 @@ def run_experiment(
     baseline_dict = {}
     for i in ["train", "val", "test"]:
         for k, mf in metric_fns.items():
-            preds = get_outputs(baseline_model_path, eval(f"{i}_df"), wt_fasta_path, toks_per_batch=eval_toks_per_batch)
+            preds = get_outputs(model_path, baseline_model_path, eval(f"{i}_df"), wt_fasta_path, toks_per_batch=eval_toks_per_batch)
             baseline_dict[f"{i}_{k}"] = mf(preds, eval(f"{i}_df").log_fitness.values)
 
     baseline_results = pd.DataFrame(columns=sorted(baseline_dict.keys()))
     baseline_results = baseline_results.append(baseline_dict, ignore_index=True)
     baseline_results.to_csv(os.path.join(baseline_folder, 'baseline_metrics.csv'),
         mode='w', index=False, columns=sorted(baseline_results.columns.values))
+
 
     ###SELF TRAINING SETUP###
     train_mse = []
@@ -141,7 +143,7 @@ def run_experiment(
     for _ in tqdm(range(num_self_train_iters)):
         #Get teacher_model pseudolabels for MSA sequences
         msa_df = pd.read_csv(os.path.join(output_dir, 'msa_data.csv'))
-        pseudolabels = get_outputs(teacher_model_path, msa_df, wt_fasta_path, toks_per_batch=eval_toks_per_batch)
+        pseudolabels = get_outputs(model_path, teacher_model_path, msa_df, wt_fasta_path, toks_per_batch=eval_toks_per_batch)
         msa_df['log_fitness'] = pseudolabels
         #Concat pseudolabels with actual labels
         combined_labelled_df = pd.concat([msa_df[["seq", "log_fitness"]], train_df[["seq", "log_fitness"]]])
@@ -162,21 +164,21 @@ def run_experiment(
         student_model_path = os.path.join(output_dir, 'model_data.pt')
         for i in ["train", "val"]:
             for k, mf in metric_fns.items():
-                preds = get_outputs(student_model_path, eval(f"{i}_df"), wt_fasta_path, toks_per_batch=eval_toks_per_batch)
+                preds = get_outputs(model_path, student_model_path, eval(f"{i}_df"), wt_fasta_path, toks_per_batch=eval_toks_per_batch)
                 arr = eval(f"{i}_{k}")
                 arr.append(mf(preds, eval(f"{i}_df").log_fitness.values))
 
         #Early stopping variables update
         if best_val_spearman is None or val_spearman[-1] > best_val_spearman:
             best_val_spearman = val_spearman[-1]
-            best_model_data["model"] = student_model.state_dict()
-            torch.save(best_model_data, os.path.join(output_dir, 'early_stopped_st_model_data.pt'))
+            torch.save(student_model.state_dict(), os.path.join(output_dir, 'early_stopped_st_model_data.pt'))
         
         teacher_model_path = student_model_path
     ###FIN SELF TRAINING LOOP###
 
     #Log test Spearman from BEST MODEL STORED IN SCRATCH
     best_st_model_preds = get_outputs(
+                                        model_path,
                                         os.path.join(output_dir, 'early_stopped_st_model_data.pt'),
                                         test_df,
                                         wt_fasta_path,
@@ -190,4 +192,8 @@ def run_experiment(
     for k, mf in metric_fns.items():
         res_dict[f"test_{k}"] = mf(best_st_model_preds, test_df.log_fitness.values)
     
+    with open(os.path.join(output_dir, "experiment_results.json"), "w") as f:
+        json.dump(res_dict, f, indent=4)
+
+
     return res_dict

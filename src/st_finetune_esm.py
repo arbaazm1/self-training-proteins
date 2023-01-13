@@ -54,7 +54,6 @@ def finetune_esm(
     output_dir = "/content/experiment_artifacts/",
     toks_per_batch=512,
 ):
-    model_data = torch.load(model_location, map_location='cpu')
     model, alphabet = pretrained.load_model_and_alphabet(model_location)
 
     batch_converter = BatchConverter(alphabet)
@@ -132,16 +131,15 @@ def finetune_esm(
 
         if best_val_spearman is None or val_spearman[epoch] > best_val_spearman:
             best_val_spearman = val_spearman[epoch]
-            model_data["model"] = model.state_dict() 
-            torch.save(model_data, os.path.join(output_dir, 'model_data.pt'))
+            torch.save(model.state_dict() , os.path.join(output_dir, 'model_data.pt'))
 
     np.savetxt(os.path.join(output_dir, 'loss_trajectory_train.npy'), train_loss)
     np.savetxt(os.path.join(output_dir, 'loss_trajectory_val.npy'), val_loss)
     np.savetxt(os.path.join(output_dir, 'spearman_trajectory_val.npy'), val_spearman)
 
     # Load best saved model
-    model, alphabet = pretrained.load_model_and_alphabet(
-        os.path.join(output_dir, 'model_data.pt'))
+    model, alphabet = pretrained.load_model_and_alphabet(model_location)
+    model.load_state_dict(torch.load(os.path.join(output_dir, 'model_data.pt')))
     if torch.cuda.is_available():
         model = model.cuda()
     model_eval = model.eval()
@@ -156,31 +154,35 @@ def finetune_esm(
     y_true = np.concatenate(y_true)
     if log:
         print(f'Final Spearman correlation {spearman(y_pred, y_true)}')
-    df_final_val = df_val.copy()
-    df_final_val['pred'] = y_pred
-    metric_fns = {
-        'spearman': spearman,
-        'ndcg': ndcg,
-    }
-    results_dict = {k: mf(df_final_val.pred.values, df_final_val.log_fitness.values)
-            for k, mf in metric_fns.items()}
-    results_dict.update({
-        'predictor': model_location.split(os.sep)[-1],
-        'epochs': epochs,
-        'learning_rate': learning_rate,
-    })
+    # df_final_val = df_val.copy()
+    # df_final_val['pred'] = y_pred
+    # metric_fns = {
+    #     'spearman': spearman,
+    #     'ndcg': ndcg,
+    # }
+    # results_dict = {k: mf(df_final_val.pred.values, df_final_val.log_fitness.values)
+    #         for k, mf in metric_fns.items()}
+    # results_dict.update({
+    #     'predictor': model_location.split(os.sep)[-1],
+    #     'epochs': epochs,
+    #     'learning_rate': learning_rate,
+    # })
 
-    results = pd.DataFrame(columns=sorted(results_dict.keys()))
-    results = results.append(results_dict, ignore_index=True)
-    results.to_csv(os.path.join(output_dir, 'metrics.csv'),
-        mode='w', index=False, columns=sorted(results.columns.values))
+    # results = pd.DataFrame(columns=sorted(results_dict.keys()))
+    # results = results.append(results_dict, ignore_index=True)
+    # results.to_csv(os.path.join(output_dir, 'metrics.csv'),
+    #     mode='w', index=False, columns=sorted(results.columns.values))
     
+    # os.remove(os.path.join(output_dir, 'model_data.pt'))
     return model
 
 
-def get_outputs(model_location, df, wt_fasta_file, toks_per_batch=512):
+def get_outputs(base_model_location, tuned_model_location, df, wt_fasta_file, toks_per_batch=512):
     
-    model, alphabet = pretrained.load_model_and_alphabet(model_location)
+    model, alphabet = pretrained.load_model_and_alphabet(base_model_location)
+    if base_model_location != tuned_model_location:
+        model.load_state_dict(torch.load(tuned_model_location))
+    
     batch_converter = BatchConverter(alphabet)
     mask_idx = torch.tensor(alphabet.mask_idx)
     model_eval = model.eval()
