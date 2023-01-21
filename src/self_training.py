@@ -195,5 +195,9 @@ def run_experiment(
     with open(os.path.join(output_dir, "experiment_results.json"), "w") as f:
         json.dump(res_dict, f, indent=4)
 
+    #Clean up large .pt files
+    os.remove(os.path.join(output_dir, 'early_stopped_st_model_data.pt'))
+    os.remove(os.path.join(output_dir, 'model_data.pt'))
+    os.remove(os.path.join(baseline_folder, "model_data.pt"))
 
     return res_dict

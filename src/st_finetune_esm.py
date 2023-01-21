@@ -133,9 +133,9 @@ def finetune_esm(
             best_val_spearman = val_spearman[epoch]
             torch.save(model.state_dict() , os.path.join(output_dir, 'model_data.pt'))
 
-    np.savetxt(os.path.join(output_dir, 'loss_trajectory_train.npy'), train_loss)
-    np.savetxt(os.path.join(output_dir, 'loss_trajectory_val.npy'), val_loss)
-    np.savetxt(os.path.join(output_dir, 'spearman_trajectory_val.npy'), val_spearman)
+    # np.savetxt(os.path.join(output_dir, 'loss_trajectory_train.npy'), train_loss)
+    # np.savetxt(os.path.join(output_dir, 'loss_trajectory_val.npy'), val_loss)
+    # np.savetxt(os.path.join(output_dir, 'spearman_trajectory_val.npy'), val_spearman)
 
     # Load best saved model
     model, alphabet = pretrained.load_model_and_alphabet(model_location)
