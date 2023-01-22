@@ -84,7 +84,7 @@ def run_cached_experiment(
     if os.path.exists(os.path.join(output_dir, "experiment_results.json")):
         with open(os.path.join(output_dir, "experiment_results.json"), "r") as f:
             res_dict = json.load(f)
-            if all([f"test_{k}" in res_dict for k in metric_fns.keys()]):
+            if all([f"best_st_test_{k}" in res_dict for k in metric_fns.keys()]):
                 print(f"Experiment already complete with data at {output_dir}")
                 return
 
